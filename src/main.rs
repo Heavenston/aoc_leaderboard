@@ -91,6 +91,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     std::fs::write("cache.json", serde_json::to_string(&leaderboard)?)?;
 
-    println!("{:#?}", leaderboard);
+    println!("Event Name: '{}'", leaderboard.event);
+    println!("Members ({}):", leaderboard.members.len());
+
+    let mut members = leaderboard.members.values().collect::<Vec<_>>();
+    members.sort_by_key(|m| u32::MAX - m.local_score);
+    for (i, member) in members.iter().enumerate() {
+        let padding = " ".repeat(2 - (i as f32 + 1.).log10().floor() as usize);
+        println!("{}({}) {}", padding, i + 1, member.name);
+        println!("       Stars: {}", member.stars);
+        println!("       Local Score: {}", member.local_score);
+        let last_day_id = member.completion_day_level.keys().filter_map(|a| a.parse::<u32>().ok()).max().unwrap_or(0).to_string();
+        println!("       Last Day: {}", last_day_id);
+        let last_day = member.completion_day_level.get(&last_day_id);
+        let st_first_star = last_day.map(|last_day|
+            last_day.get("1").map(|a| a.get_star_ts)
+        ).flatten();
+        let st_second_star = last_day.map(|last_day|
+            last_day.get("2").map(|a| a.get_star_ts)
+        ).flatten();
+        match (st_first_star, st_second_star) {
+            (Some(sfs), Some(sss)) => {
+                println!("       Time2Second: {:.2?}min", (sss - sfs) as f32 / 60.);
+            }
+            _ => ()
+        }
+    }
+
     Ok(())
 }
