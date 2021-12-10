@@ -1,105 +1,15 @@
-use std::collections::HashMap;
-use serde::{Serialize, Deserialize, de::{ self, Deserializer, Visitor }};
+mod utils;
+mod aoc_api;
+
+use aoc_api::*;
+
 use std::time::Duration;
-use chrono::prelude::*;
-use chrono::{ TimeZone, Utc};
-
-fn string_or_int<'de, D>(deserializer: D) -> Result<u32, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    use std::marker::PhantomData;
-    use std::fmt;
-
-    struct StringOrInt(PhantomData<fn() -> u32>);
-    impl<'de> Visitor<'de> for StringOrInt {
-        type Value = u32;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            formatter.write_str("string or int")
-        }
-
-        fn visit_str<E: de::Error>(self, value: &str) -> Result<u32, E>
-        {
-            Ok(value.parse::<u32>().unwrap())
-        }
-
-        fn visit_u32<E: de::Error>(self, value: u32) -> Result<u32, E> {
-            Ok(value)
-        }
-        fn visit_u64<E: de::Error>(self, value: u64) -> Result<u32, E> {
-            Ok(value as u32)
-        }
-    }
-
-    deserializer.deserialize_any(StringOrInt(PhantomData))
-}
-
-fn current_time() -> u32 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as u32
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct AOCLeaderboard {
-    #[serde(default = "current_time")]
-    #[serde(alias = "cache_invalidation")]
-    cache_creation: u32,
-    event: String,
-    owner_id: String,
-    members: HashMap<String, AOCUser>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct AOCUser {
-    #[serde(deserialize_with = "string_or_int")]
-    last_star_ts: u32,
-    #[serde(deserialize_with = "string_or_int")]
-    stars: u32,
-    id: String,
-    name: String,
-    #[serde(deserialize_with = "string_or_int")]
-    local_score: u32,
-    #[serde(deserialize_with = "string_or_int")]
-    global_score: u32,
-    completion_day_level: HashMap<String, HashMap<String, AOCDayLevel>>,
-}
-
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-struct AOCDayLevel {
-    #[serde(deserialize_with = "string_or_int")]
-    get_star_ts: u32,
-}
-
-async fn get_leaderboard() -> Result<AOCLeaderboard, impl std::error::Error> {
-    let session_token = std::env::var("SESSION_COOKIE").expect("No session cookie provided");
-    reqwest::Client::new()
-        .get("https://adventofcode.com/2021/leaderboard/private/view/1550660.json")
-        .header("cookie",&format!("session={}", session_token))
-        .send()
-        .await?
-        .json()
-        .await
-}
-
-fn format_time(duration: Duration) -> String {
-    let mut seconds = duration.as_secs();
-    let mut mins = seconds / 60;
-    seconds -= mins * 60;
-    let hours = mins / 60;
-    mins -= hours * 60;
-
-    format!("{}h{}min{}s", hours, mins, seconds)
-}
-
-fn get_aoc_instant(day: u32) -> u32 {
-    Utc.ymd(Utc::now().year(), 12, day).and_hms(5, 0, 0).timestamp() as u32
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let leaderboard = if let Ok(file) = std::fs::read_to_string("cache.json") {
         let leaderboard: AOCLeaderboard = serde_json::from_str(&file)?;
-        if current_time() > leaderboard.cache_creation + 15 * 60 * 60 {
+        if utils::current_time() > leaderboard.cache_creation + 15 * 60 * 60 {
             get_leaderboard().await?
         }
         else { leaderboard }
@@ -126,14 +36,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             last_day.get("1").map(|a| a.get_star_ts)
         ).flatten();
         if let Some(sfs) = st_first_star {
-            println!("       Time2First: {}", format_time(Duration::from_secs((sfs - get_aoc_instant(last_day_id)) as u64)));
+            println!("       Time2First: {}", utils::format_time(Duration::from_secs((sfs - utils::get_aoc_instant(last_day_id)) as u64)));
         }
         let st_second_star = last_day.map(|last_day|
             last_day.get("2").map(|a| a.get_star_ts)
         ).flatten();
         match (st_first_star, st_second_star) {
             (Some(sfs), Some(sss)) => {
-                println!("       Time2Second: {}", format_time(Duration::from_secs((sss - sfs) as u64)));
+                println!("       Time2Second: {}", utils::format_time(Duration::from_secs((sss - sfs) as u64)));
             }
             _ => ()
         }
