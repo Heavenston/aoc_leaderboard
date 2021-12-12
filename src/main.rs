@@ -5,10 +5,7 @@ use aoc_api::*;
 
 use std::time::Duration;
 use std::io::{stdout, Write};
-use crossterm::{
-    execute, queue,
-    style::{self, Stylize}, cursor, terminal
-};
+use crossterm::{ queue, style };
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
